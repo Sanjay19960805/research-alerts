@@ -29,13 +29,13 @@
     }
   },
   "telegram": {
-    "bot_token": "<set-your-bot-token>",
-    "chat_id": "<set-your-chat-id>",
+    "bot_token": "[missing data]",
+    "chat_id": "[missing data]",
     "research_only_disclaimer": "research only",
     "bear_counterpoint": "Bear counter-point: this can be a momentum trap if the move is already priced in."
   },
   "token_cost": {
-    "model": "<set-your-model>",
+    "model": "[missing data]",
     "rate_per_1k_tokens": "[missing data]",
     "rough_per_run_estimate": "[missing data]"
   }
