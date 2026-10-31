@@ -1,0 +1,42 @@
+{
+  "project": {
+    "name": "research-alerts",
+    "phase": "1",
+    "description": "Research-only stock screener and Telegram alerting layer. No order placement, no broker integration, no capital deployment."
+  },
+  "screening": {
+    "source_configured": false,
+    "universe": [
+      "NVDA",
+      "SK HYNIX",
+      "TSM",
+      "ASML",
+      "CRWD",
+      "AVGO"
+    ],
+    "default_shortlist": [],
+    "thresholds": {
+      "min_market_cap_usd": 5000000000,
+      "min_volume": 0,
+      "min_price_change_pct_1d": 0.0,
+      "min_price_change_pct_5d": 0.0,
+      "min_relative_strength_14d": 0.0,
+      "research_only": true
+    },
+    "schedule": {
+      "timezone": "UTC",
+      "run_minutes": ["09:00", "13:00", "17:00"]
+    }
+  },
+  "telegram": {
+    "bot_token": "<set-your-bot-token>",
+    "chat_id": "<set-your-chat-id>",
+    "research_only_disclaimer": "research only",
+    "bear_counterpoint": "Bear counter-point: this can be a momentum trap if the move is already priced in."
+  },
+  "token_cost": {
+    "model": "<set-your-model>",
+    "rate_per_1k_tokens": "[missing data]",
+    "rough_per_run_estimate": "[missing data]"
+  }
+}
