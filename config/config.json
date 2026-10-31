@@ -29,8 +29,8 @@
     }
   },
   "telegram": {
-    "bot_token": "[missing data]",
-    "chat_id": "[missing data]",
+    "bot_token": "9270828467:AAHCmITI9u_r3KZIXRdG8tunAYsjEMg0Mbw",
+    "chat_id": "1138246643",
     "research_only_disclaimer": "research only",
     "bear_counterpoint": "Bear counter-point: this can be a momentum trap if the move is already priced in."
   },
