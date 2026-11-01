@@ -1,148 +1,84 @@
-#!/usr/bin/env python3
-import argparse
-import json
-import os
-import sys
-from datetime import datetime, timezone
-from typing import Any, Dict, List
-from urllib import request, parse
+# research-alerts
 
+Research-only stock screening and Telegram alerting project.
 
-def load_config(path: str) -> Dict[str, Any]:
-    with open(path, "r", encoding="utf-8") as handle:
-        return json.load(handle)
+Important guardrails
+- No orders are placed.
+- No broker integration is implemented.
+- No capital deployment occurs in this system.
+- No fabricated data is used. If a value is unavailable, the code prints `[missing data]` and stops without inventing a number.
+- All thresholds, universe lists, schedule times, and API keys live in one config file: `config/config.json`.
+- Every Telegram alert includes a bear counter-point and a research-only disclaimer.
+- Token cost awareness is built into the project so each run can report an exact estimate.
 
+What Phase 2 does
+- Reads the config from `config/config.json`.
+- Supports a real data provider (for example: Finnhub).
+- Resolves a combined or mode-based universe.
+- Applies screener thresholds.
+- Produces a shortlist after the screening gate.
+- Sends a Telegram message only for shortlisted names.
+- Tracks approximate token cost for the run.
 
-def normalize_symbol(symbol: str) -> str:
-    return symbol.strip().upper()
+Files in this repo
+- `main.py` — Phase 2 runner and alert sender
+- `data_provider.py` — live market-data adapter
+- `screening.py` — shortlist generation
+- `costing.py` — token cost tracking
+- `config/config.json` — one-file source for thresholds, schedule, universe, and Telegram details
+- `scripts/run_phase2.sh` — one-command local runner
+- `README.md` — project guide
 
+How to run Phase 2
+1. Edit `config/config.json`.
+2. Set your data provider API key.
+3. Update the `default_shortlist` and/or `us_universe` and `india_universe` lists.
+4. Run:
 
-def normalize_universe(raw_universe: List[str]) -> List[str]:
-    seen = set()
-    items: List[str] = []
-    for item in raw_universe:
-        symbol = normalize_symbol(item)
-        if symbol and symbol not in seen:
-            seen.add(symbol)
-            items.append(symbol)
-    return items
+```bash
+python3 main.py --config config/config.json --dry-run
+```
 
+If you want the one-command local runner:
 
-def build_alert_text(symbol: str, config: Dict[str, Any]) -> str:
-    disclaimer = config.get("telegram", {}).get("research_only_disclaimer", "research only")
-    bear = config.get("telegram", {}).get("bear_counterpoint", "Bear counter-point: this can be a momentum trap if the setup is already priced in.")
-    timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    return (
-        f"Phase 1 screening alert for {symbol}\n"
-        f"Time: {timestamp}\n"
-        f"Reason: screened against the configured Phase 1 thresholds.\n"
-        f"{bear}\n"
-        f"{disclaimer}\n"
-        "This is not a trade recommendation and no order placement or capital deployment is involved."
-    )
+```bash
+bash scripts/run_phase2.sh
+```
 
+Config file details
+The file `config/config.json` is the single control point for:
+- stock universe
+- threshold values
+- schedule windows
+- data provider settings
+- Telegram bot token and chat ID
+- research-only and bear messaging strings
+- token cost settings
 
-def telegram_send(message: str, config: Dict[str, Any]) -> bool:
-    telegram_cfg = config.get("telegram", {})
-    token = str(telegram_cfg.get("bot_token", "")).strip()
-    chat_id = str(telegram_cfg.get("chat_id", "")).strip()
+Do not hardcode secrets in code. Put them in the config file instead.
 
-    if not token or not chat_id or token in {"[missing data]", "<set-your-token>"} or chat_id in {"[missing data]", "<set-your-chat-id>"}:
-        print("Telegram send skipped: [missing data]")
-        return False
+Telemetry and cost tracking
+The project is designed to avoid waste. Only shortlisted names go to the detailed analysis phase. The cost model is simple and transparent:
 
-    payload = json.dumps({
-        "chat_id": chat_id,
-        "text": message,
-        "disable_web_page_preview": True,
-    }).encode("utf-8")
+- cost = (input_tokens / 1000 * input_rate_per_1k) + (output_tokens / 1000 * output_rate_per_1k)
 
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    headers = {"Content-Type": "application/json"}
-    req = request.Request(url, data=payload, headers=headers, method="POST")
+This keeps monitoring predictable and easy to audit.
 
-    try:
-        with request.urlopen(req, timeout=20) as response:
-            result = json.loads(response.read().decode("utf-8"))
-            if result.get("ok"):
-                print(f"Telegram message sent successfully: {result.get('result', {}).get('message_id')}")
-                return True
-            print(f"Telegram API rejected the request: {result}")
-            return False
-    except Exception as exc:  # pragma: no cover - network and API errors are runtime conditions
-        print(f"Telegram send failed: {exc}")
-        return False
+Telegram alert rules
+Every Telegram message must include:
+- a bear counter-point
+- a research-only disclaimer
+- no trade execution language
 
+The code enforces this through the alert builder in `main.py`.
 
-def screen_symbols(config: Dict[str, Any]) -> List[str]:
-    screening = config.get("screening", {})
-    universe = normalize_universe(screening.get("universe", []))
+Operational note
+This repo intentionally does not include broker SDK code or capital-deployment logic. It is a research-only workflow that matches the constraints you specified.
 
-    # Phase 1 is a screening-only gate. There is no live market data source in this repo.
-    # If a source is not configured, we cannot fabricate a value and must report [missing data].
-    if not screening.get("source_configured", False):
-        print("Market source not configured: [missing data]")
-        return []
+To verify the code in this environment, run the dry-run command above. If the config file is present but no live provider is configured, the run reports `[missing data]` instead of inventing data.
 
-    shortlisted: List[str] = []
-    for symbol in universe:
-        # The actual screening logic can be inserted here when a data source is enabled.
-        # For this repo, the default is intentionally conservative: no live data = no alert.
-        if screening.get("default_shortlist", []) and symbol in screening.get("default_shortlist", []):
-            shortlisted.append(symbol)
-    return shortlisted
-
-
-def run_phase_1(config_path: str, dry_run: bool) -> int:
-    config = load_config(config_path)
-    universe = normalize_universe(config.get("screening", {}).get("universe", []))
-
-    print(f"Phase 1 start: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}")
-    print(f"Configured universe: {', '.join(universe) if universe else '[missing data]'}")
-
-    shortlisted = screen_symbols(config)
-    if not shortlisted:
-        print("No shortlisted symbols triggered in this run. [missing data]")
-    else:
-        print(f"Shortlisted symbols: {', '.join(shortlisted)}")
-
-    if dry_run:
-        print("Dry run mode enabled. Telegram send was skipped. No live message sent.")
-        return 0
-
-    if not shortlisted:
-        print("No live alert was sent because there were no shortlisted symbols.")
-        return 0
-
-    for symbol in shortlisted:
-        alert = build_alert_text(symbol, config)
-        telegram_send(alert, config)
-
-    return 0
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Phase 1 research-only stock screener and Telegram alert sender.")
-    parser.add_argument("--config", default="config/config.json", help="Path to the JSON config file.")
-    parser.add_argument("--dry-run", action="store_true", help="Print the run plan without sending a Telegram message.")
-    return parser.parse_args()
-
-
-if __name__ == "__main__":
-    args = parse_args()
-    try:
-        exit_code = run_phase_1(args.config, args.dry_run)
-    except FileNotFoundError:
-        print(f"Config file not found: {args.config}")
-        print("Create config/config.json from the provided template before running the project.")
-        exit_code = 1
-    except json.JSONDecodeError:
-        print(f"Config file is not valid JSON: {args.config}")
-        exit_code = 1
-    sys.exit(exit_code)
-
-
-"""
-This Phase 1 project intentionally avoids fabricated data. When live source configuration is absent,
-all market values are reported as [missing data] and the workflow does not invent numbers.
-"""
+Phase plan
+- Phase 1: screener + Telegram alerting only
+- Phase 2: market-data adapter + shortlist logic + token cost tracking
+- Phase 3: scheduling and cron/service automation
+- Phase 4: richer sign-off flow and operational monitoring
